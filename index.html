@@ -119,14 +119,14 @@ async function openBox(buf,p){
 const home=(()=>{const m=location.host.match(/^([^.]+)\.github\.io$/),p=location.pathname.split("/").filter(Boolean)[0];return m&&p?m[1]+"/"+p:"";})();
 // The data branch, read straight from raw (no API, so no hourly limit shared with other pages); the query changes every 20 s.
 // Raw caches a path for 5 minutes whatever the query, so every minute's data also has its own path (s/YYYYMMDDHHMM.bin, UTC).
-// Ask only for minutes that started over 80 s ago: a path asked for before it exists is cached as missing for a minute or two.
+// A tick pushes about 20 s into its minute, so ask for a minute only 45 s after it starts: a path asked for before it exists is cached as missing for a minute or two, and then the one before is used.
 const slot=m=>{const d=new Date(m*60000),p=n=>String(n).padStart(2,"0");return`s/${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}.bin`;};
 const fetchBin=async n=>{
   const get=async u=>{const r=await fetch(u,{cache:"no-store"});if(!r.ok)throw new Error("fetch "+r.status);return r.arrayBuffer();};
   if(!home)return get(n+"?t="+Date.now());
   const base=`https://raw.githubusercontent.com/${home}/data/`;
   if(n==="d.bin"){
-    const m=Math.floor((Date.now()-20000)/60000)-1;
+    const m=Math.floor((Date.now()-45000)/60000);
     for(let k=0;k<6;k++){try{return await get(base+slot(m-k));}catch(e){}}
   }
   return get(base+n);
