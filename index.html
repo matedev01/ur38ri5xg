@@ -94,6 +94,10 @@ svg .hit{fill:transparent;cursor:pointer;outline:none}
 .gate{max-width:380px;margin:18vh auto 0;padding:0 16px}
 .gate input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin:8px 0}
 .err{color:var(--crit);font-size:13px;min-height:20px}
+/* interim layout fix (A-022): keep text columns readable on narrow screens */
+td.t{min-width:14ch}
+td{overflow-wrap:anywhere}
+td .pill{white-space:normal}
 </style>
 </head>
 <body>
