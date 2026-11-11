@@ -98,8 +98,31 @@ svg .hit{fill:transparent;cursor:pointer;outline:none}
 td.t{min-width:14ch}
 td{overflow-wrap:anywhere}
 td .pill{white-space:normal}
-@media (max-width:760px){td.t{min-width:210px}}
-td .pill{overflow-wrap:normal}
+@media (max-width:760px){table:not(.stack) td.t{min-width:210px}}
+/* A-022: a no-wrap cell stops at 28ch with an ellipsis and keeps its full text as the cell's title. Chrome ignores
+   max-width on a table cell, so the limit sits on an inner box. */
+td.nw>.cut{display:block;max-width:28ch;overflow:hidden;text-overflow:ellipsis}
+/* a pill breaks only between words (with overflow-wrap:anywhere it broke inside them and squeezed its column to two
+   letters), and not at all in a no-wrap column, where the page lint keeps it under 40 characters */
+td .pill{overflow-wrap:break-word}
+td.nw .pill{white-space:nowrap}
+.card.lv-critical{border-color:var(--crit);box-shadow:inset 4px 0 0 var(--crit)}
+.card.lv-critical>h2{color:var(--crit)}
+/* A-022: at phone width a table marked "stack" draws one card per row, each cell as its column label and value */
+@media (max-width:760px){
+table.stack thead{display:none}
+table.stack,table.stack tbody,table.stack tr{display:block;width:100%}
+table.stack tr{border:1px solid var(--line);border-radius:8px;margin:0 0 8px;padding:4px 10px}
+table.stack tr.hl{background:var(--hl)}
+table.stack tr.hl td{background:none}
+table.stack td{display:grid;grid-template-columns:minmax(76px,30%) minmax(0,1fr);gap:8px;border:0;padding:3px 0;min-width:0;white-space:normal;text-align:left}
+table.stack td::before{content:attr(data-l);color:var(--ink2);font-size:12px;line-height:1.6}
+table.stack td>*{justify-self:start;min-width:0;max-width:100%}
+table.stack td.nw>.cut{max-width:none;overflow:visible}
+table.stack td .pill{white-space:normal}
+table.stack td[data-tip]::after{content:attr(data-tip);grid-column:2;color:var(--ink2);font-size:12px}
+table.stack td:empty{display:none}
+}
 </style>
 </head>
 <body>
@@ -234,7 +257,7 @@ function block(b){
       case"hero":return h("div",{cls:"card hero"},h("div",{cls:"v",text:b.value}),h("div",{},h("div",{cls:"l",text:b.label}),h("div",{cls:"n",text:b.note||""})));
       case"stats":return h("div",{cls:"stats"},...b.items.map(i=>h("div",{cls:"stat"},h("div",{cls:"l",text:i.label}),h("div",{cls:"v",text:i.value}),i.status?pill(i.status,i.status_label||""):null,h("div",{cls:"n",text:i.note||""}))));
       case"sec":return h("div",{},h("div",{cls:"sec",text:b.text}),b.note?h("p",{cls:"note",text:b.note}):null);
-      case"md":return h("div",{cls:"card"},b.title?h("h2",{text:b.title}):null,h("div",{cls:"md"},md(b.text)));
+      case"md":return h("div",{cls:lvl(b)},b.title?h("h2",{text:b.title}):null,h("div",{cls:"md"},md(b.text)));
       case"table":return tableBlock(b);
       case"feed":return h("div",{cls:"card"},b.title?h("h2",{text:b.title}):null,b.note?h("p",{cls:"note",text:b.note}):null,h("ul",{cls:"feed"},...b.items.map(i=>h("li",{},i.time?h("time",{text:i.time}):null,i.url?h("a",{href:i.url,target:"_blank",rel:"noopener noreferrer",text:i.text}):i.text))));
       case"cards":return cardsBlock(b);
@@ -279,11 +302,16 @@ function tableEl(cols,rows,opt){
       const tr=h("tr",{cls:r._hl?"hl":null});
       for(const c of cols){
         const v=r[c.k];
-        const td=h("td",{cls:c.num?"n":c.nw?"nw":"t"});
         const shown=c.dec!=null&&typeof v==="number"?v.toFixed(c.dec):(v??"");
-        if(r["_url_"+c.k])td.append(h("a",{href:r["_url_"+c.k],target:"_blank",rel:"noopener noreferrer",text:shown}));
-        else if(r["_st_"+c.k])td.append(pill(r["_st_"+c.k],shown));
-        else td.textContent=shown;
+        // data-l: the column label for the stacked phone layout; a tip (_tip_<col>) is the cell's title and shows under it
+        // when stacked; a no-wrap cell keeps its full text as its title, since the cell may cut it with an ellipsis
+        const tip=r["_tip_"+c.k]||null,cut=!!(c.nw&&!c.full&&!r["_st_"+c.k]);   // a pill is never cut: an ellipsis would hide all of it
+        const td=h("td",{cls:c.num?"n":c.nw?"nw":"t","data-l":c.l,"data-tip":tip,title:tip||(cut&&String(shown).length>20?String(shown):null)});
+        const box=cut?h("span",{cls:"cut"}):td;
+        if(r["_url_"+c.k])box.append(h("a",{href:r["_url_"+c.k],target:"_blank",rel:"noopener noreferrer",text:shown}));
+        else if(r["_st_"+c.k])box.append(pill(r["_st_"+c.k],shown));
+        else box.textContent=shown;
+        if(box!==td&&box.childNodes.length)td.append(box);
         tr.append(td);
       }
       tb.append(tr);
@@ -291,13 +319,14 @@ function tableEl(cols,rows,opt){
   };
   const th=cols.map(c=>{const e=h("th",{cls:c.num?"n":null,text:c.l,onclick:()=>{if(key===c.k)desc=!desc;else{key=c.k;desc=!!c.num;}paint();}});return e;});
   paint();
-  const t=h("table",{},h("thead",{},h("tr",{},...th)),tb);
+  const t=h("table",{cls:opt.stack?"stack":null},h("thead",{},h("tr",{},...th)),tb);
   t._repaint=q=>{opt.q=q;paint();};
   return t;
 }
+const lvl=b=>b.level==="critical"?"card lv-critical":"card";
 function tableBlock(b){
-  const t=tableEl(b.cols,b.rows,{sort:b.sort,desc:b.desc});
-  return h("div",{cls:"card"},b.title?h("h2",{text:b.title}):null,b.note?h("p",{cls:"note",text:b.note}):null,
+  const t=tableEl(b.cols,b.rows,{sort:b.sort,desc:b.desc,stack:!!b.stack});
+  return h("div",{cls:lvl(b)},b.title?h("h2",{text:b.title}):null,b.note?h("p",{cls:"note",text:b.note}):null,
     b.search?h("input",{cls:"srch",type:"search",placeholder:"Search","aria-label":"Search",oninput:e=>t._repaint(e.target.value)}):null,
     h("div",{cls:"tw"},t));
 }
